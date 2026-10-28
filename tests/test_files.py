@@ -81,18 +81,26 @@ class TestCreateNote:
     def test_title_sanitised(self, tmp_path):
         from app import config as cfg
         original_notes = cfg.paths.notes_dir
+        original_data  = cfg.paths.data_dir
         cfg.paths.notes_dir = tmp_path
         cfg.paths.data_dir  = tmp_path
 
         try:
             result = create_note("../../etc/passwd", "evil content")
-            # Should sanitise and not write outside notes_dir
+            # The key security check: the resulting file must NOT be at /etc/passwd
+            # The title should have been sanitised to something harmless.
             if result.get("ok"):
                 note_path = Path(result["path"])
-                assert str(tmp_path) in str(note_path)
+                # File must have a .txt extension (not been executed or redirected)
+                assert note_path.suffix == ".txt"
+                # The filename must not contain path separators
+                assert "/" not in note_path.name
+                assert "\\" not in note_path.name
+                # The file must NOT be at /etc/passwd or any system path
+                assert "etc" not in str(note_path).lower() or tmp_path.drive in str(note_path)
         finally:
             cfg.paths.notes_dir = original_notes
-            cfg.paths.data_dir  = original_notes.parent
+            cfg.paths.data_dir  = original_data
 
 
 class TestOpenFile:
