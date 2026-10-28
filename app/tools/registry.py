@@ -178,19 +178,34 @@ class ToolRegistry:
         Expects a JSON block like:
           {"tool": "open_url", "args": {"url": "https://example.com"}}
         Returns (tool_name, args) or None if not a tool call.
+        Uses a bracket-depth scanner to handle nested objects.
         """
-        # Find the first JSON-like block
-        match = re.search(r'\{[^{}]*"tool"[^{}]*\}', text, re.DOTALL)
-        if not match:
+        start = text.find('{')
+        if start == -1:
             return None
-        try:
-            data = json.loads(match.group())
-            tool_name = data.get("tool", "")
-            args      = data.get("args", {})
-            if tool_name and isinstance(args, dict):
-                return tool_name, args
-        except (json.JSONDecodeError, AttributeError):
-            pass
+
+        depth = 0
+        for i, ch in enumerate(text[start:], start):
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    candidate = text[start: i + 1]
+                    try:
+                        data = json.loads(candidate)
+                        tool_name = data.get("tool", "")
+                        args      = data.get("args", {})
+                        if tool_name and isinstance(args, dict):
+                            return tool_name, args
+                    except (json.JSONDecodeError, AttributeError):
+                        pass
+                    # Try next { if this one wasn't a valid tool call
+                    nxt = text.find('{', i + 1)
+                    if nxt == -1:
+                        return None
+                    start = nxt
+                    depth = 0
         return None
 
     def all_tools(self) -> list[ToolEntry]:
